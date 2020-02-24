@@ -1,7 +1,8 @@
 use std::fmt;
 use std::result;
+use itertools::Itertools;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum DNANucleotide {
     Adenine,
     Guanine,
@@ -16,7 +17,7 @@ impl DNANucleotide {
             'G' => DNANucleotide::Guanine,
             'C' => DNANucleotide::Cytosine,
             'T' => DNANucleotide::Thymine,
-            _   => panic!("Invalid Base Character")
+            _   => panic!(format!("{}: Invalid Base Character", c))
         }
     }
 
@@ -41,7 +42,7 @@ impl fmt::Display for DNANucleotide {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum RNANucleotide {
     Adenine,
     Guanine,
@@ -56,7 +57,7 @@ impl RNANucleotide {
             'G' => RNANucleotide::Guanine,
             'C' => RNANucleotide::Cytosine,
             'U' => RNANucleotide::Uracil,
-            _   => panic!("Invalid Base Character")
+            _   => panic!(format!("{}: Invalid Base Character", c))
         }
     }
 
@@ -81,7 +82,7 @@ impl fmt::Display for RNANucleotide {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AminoAcid {
     // Neutral, Non-polar amino acids
     Glycine, Alanine, Valine, Isoleucine, Tryptophan, 
@@ -101,13 +102,13 @@ pub enum AminoAcid {
 }
 
 impl fmt::Display for AminoAcid {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> result::Result<(), fmt::Error> { 
+    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> { 
         match self {
             AminoAcid::Glycine => write!(f, "Gly"),
             AminoAcid::Alanine => write!(f, "Ala"),
             AminoAcid::Valine => write!(f, "Val"),
             AminoAcid::Isoleucine => write!(f, "IIe"),
-            AminoAcid::Tryptophan => write!(f, "Try"),
+            AminoAcid::Tryptophan => write!(f, "Trp"),
             AminoAcid::Proline => write!(f, "Pro"),
             AminoAcid::Methionine => write!(f, "Met"),
             AminoAcid::Leucine => write!(f, "Leu"),
@@ -121,7 +122,7 @@ impl fmt::Display for AminoAcid {
             AminoAcid::Histidine => write!(f, "His"),
             AminoAcid::Threonine => write!(f, "Thr"),
             AminoAcid::Tyrosine => write!(f, "Tyr"),
-            AminoAcid::Glutamine => write!(f, "Glu"),
+            AminoAcid::Glutamine => write!(f, "Gln"),
             AminoAcid::Cysteine => write!(f, "Cys"),
             AminoAcid::STOP => write!(f, "#")
         }
@@ -131,8 +132,8 @@ impl fmt::Display for AminoAcid {
 
 /// A Gene is a sequence of DNA Nucleotides.
 /// The nucleotides are arranged with
-/// the 3' end at the first index and the 
-/// 5' end at the last index
+/// the 5' end at the first index and the 
+/// 3' end at the last index
 #[derive(Debug)]
 pub struct DNASequence {
     sequence: Vec<DNANucleotide>
@@ -154,7 +155,7 @@ pub struct Codon {
 }
 
 impl  fmt::Display for DNASequence {
-     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> result::Result<(), fmt::Error> {
+     fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
          let mut string_seq = String::new();
          for n in &self.sequence {
             if let Some(c) = n.to_string().chars().next() {
@@ -166,7 +167,7 @@ impl  fmt::Display for DNASequence {
 }
 
 impl  fmt::Display for RNASequence {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> result::Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
         let mut string_seq = String::new();
         for n in &self.sequence {
            if let Some(c) = n.to_string().chars().next() {
@@ -178,8 +179,20 @@ impl  fmt::Display for RNASequence {
 }
 
 impl fmt::Display for Codon {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> result::Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
         write!(f, "({}, {}, {})", self.codon[0], self.codon[1], self.codon[2])
+    }
+}
+
+impl fmt::Display for AminoAcidSequence {
+    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error>  {
+        let mut string_seq = String::from("NH2 - ");
+        for acid in &self.sequence {
+            string_seq.extend(acid.to_string().chars());
+            string_seq.extend(" - ".chars());
+        }
+        string_seq.extend("COOH".chars());
+        write!(f, "{}", string_seq)
     }
 }
 
@@ -221,13 +234,26 @@ impl RNASequence {
     }
 
     pub fn translate(&self) -> AminoAcidSequence {
-        unimplemented!()
+        let mut acids: Vec<AminoAcid> = Vec::new();
+        for chunk in &self.sequence.iter().chunks(Codon::codon_size()) {
+            let triplet: Vec<&RNANucleotide> = chunk.collect();
+            if triplet.len() == Codon::codon_size() {
+                let cur_acid = Codon::from_rna_triplet([*triplet[0], *triplet[1], *triplet[2]]).get_amino_acid();
+                if cur_acid == AminoAcid::STOP {
+                    break;
+                }
+                acids.push(cur_acid);
+            }
+        }
+        AminoAcidSequence::from_acid_list(acids)
     }
 }
 
 impl Codon {
-    pub fn from_rna_sequence(rna: &RNASequence, start: usize, end: usize) -> Self {
-        unimplemented!()
+    pub fn from_rna_triplet(triplet: [RNANucleotide; 3]) -> Self {
+        Codon {
+            codon: triplet
+        }
     }
 
     pub fn get_amino_acid(&self) -> AminoAcid {
@@ -236,24 +262,28 @@ impl Codon {
         match self.codon {
             [Uracil, Guanine, Guanine] => Tryptophan,
             [Uracil, Uracil, Uracil] | [Uracil, Uracil, Cytosine] => PhenylAlanine,
-            [Uracil, Uracil, Adenine] | [Uracil, Uracil, Guanine] => Leucine,
+            [Guanine, Adenine, Adenine] | [Guanine, Adenine, Guanine] => Glutamine,
             [Adenine, Uracil, Uracil] | [Adenine, Uracil, Cytosine] => Isoleucine,
             [Adenine, Uracil, Adenine] | [Adenine, Uracil, Guanine] => Methionine,
             [Adenine, Adenine, Uracil] | [Adenine, Adenine, Cytosine] => Asparagine,
             [Adenine, Adenine, Adenine] | [Adenine, Adenine, Guanine] => Lysine,
-            [Adenine, Guanine, Uracil] | [Adenine, Guanine, Cytosine] => Serine,
-            [Adenine, Guanine, Adenine] | [Adenine, Guanine, Guanine] => Arginine,
+            
+            [Adenine, Guanine, Adenine] | [Adenine, Guanine, Guanine] | 
+            [Cytosine, Guanine, Uracil] | [Cytosine, Guanine, Cytosine] |
+             [Cytosine, Guanine, Adenine] | [Cytosine, Guanine, Guanine] =>  Arginine,
             [Cytosine, Adenine, Uracil] | [Cytosine, Adenine, Cytosine] => Histidine,
-            [Cytosine, Adenine, Adenine] | [Cytosine, Adenine, Guanine] => Glycine,
+            [Cytosine, Adenine, Adenine] | [Cytosine, Adenine, Guanine] => GlutamicAcid,
             [Guanine, Adenine, Uracil] | [Guanine, Adenine, Cytosine] => AsparticAcid,
             [Uracil, Adenine, Uracil] | [Uracil, Adenine, Cytosine] => Tyrosine,
             [Uracil, Guanine, Uracil] | [Uracil, Guanine, Cytosine] => Cysteine,
-            [Uracil, Adenine, Adenine] |
-            [Uracil, Adenine, Guanine] | [Uracil, Guanine, Adenine] => STOP,
+            [Uracil, Adenine, Adenine] | [Uracil, Adenine, Guanine] | [Uracil, Guanine, Adenine] => STOP,
             [Uracil, Cytosine, Uracil] | [Uracil, Cytosine, Cytosine] |
             [Uracil, Cytosine, Adenine] | [Uracil, Cytosine, Guanine] => Serine,
+            [Adenine, Guanine, Uracil] | [Adenine, Guanine, Cytosine] => Serine,
+
             [Cytosine, Uracil, Uracil] | [Cytosine, Uracil, Cytosine] |
             [Cytosine, Uracil, Adenine] | [Cytosine, Uracil, Guanine] => Leucine,
+            [Uracil, Uracil, Adenine] | [Uracil, Uracil, Guanine] => Leucine,
             [Cytosine, Cytosine, Uracil] | [Cytosine, Cytosine, Cytosine] |
             [Cytosine, Cytosine, Adenine] | [Cytosine, Cytosine, Guanine] => Proline,
             [Adenine, Cytosine, Uracil] | [Adenine, Cytosine, Cytosine] |
@@ -262,18 +292,33 @@ impl Codon {
             [Guanine, Uracil, Adenine] | [Guanine, Uracil, Guanine]  => Valine,
             [Guanine, Cytosine, Uracil] | [Guanine, Cytosine, Cytosine] |
             [Guanine, Cytosine, Adenine] | [Guanine, Cytosine, Guanine] => Alanine,
-            _ => panic!(format!("{}: Not a valid Codon.", self))
+            [Guanine, Guanine, Uracil] | [Guanine, Guanine, Cytosine] |
+            [Guanine, Guanine, Adenine] | [Guanine, Guanine, Guanine] => Glycine,
         }
     }
+
+    pub fn codon_size() -> usize {
+        3
+    }
+}
+
+impl AminoAcidSequence {
+     pub fn from_acid_list(list: Vec<AminoAcid>) -> Self {
+         AminoAcidSequence {
+             sequence: list
+         }
+     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{Codon, DNANucleotide, DNASequence, RNANucleotide, RNASequence};
+    use super::{DNASequence};
     #[test]
     fn test_gene() {
-        let gene = DNASequence::new(String::from("ATGCCCAACGGCATGCT"));
-        assert_eq!(gene.get_complement().to_string(), "AGCATGCCGTTGGGCAT");
+        let gene = DNASequence::new(String::from("ATGCCCAACGGCATGCTATC"));
+        // let brca = DNAmSequence::new(String::from(BRCA1));
+        // println!("{}", brca.transcribe().translate().to_string());
+        assert_eq!(gene.get_complement().to_string(), "GATAGCATGCCGTTGGGCAT");
     }
 }
 
