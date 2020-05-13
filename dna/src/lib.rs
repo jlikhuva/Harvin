@@ -98,7 +98,7 @@ pub enum AminoAcid {
     Serine, Threonine, Tyrosine, Asparagine, Glutamine,
     Cysteine,
 
-    STOP
+    STOP, START
 }
 
 impl fmt::Display for AminoAcid {
@@ -124,7 +124,8 @@ impl fmt::Display for AminoAcid {
             AminoAcid::Tyrosine => write!(f, "Tyr"),
             AminoAcid::Glutamine => write!(f, "Gln"),
             AminoAcid::Cysteine => write!(f, "Cys"),
-            AminoAcid::STOP => write!(f, "#")
+            AminoAcid::STOP => write!(f, "#"),
+            AminoAcid::START => write!(f, "@")
         }
     }
 }
@@ -235,7 +236,17 @@ impl RNASequence {
 
     pub fn translate(&self) -> AminoAcidSequence {
         let mut acids: Vec<AminoAcid> = Vec::new();
-        for chunk in &self.sequence.iter().chunks(Codon::codon_size()) {
+        let sequence = &self.sequence;
+        let mut start = 0;
+
+        // Walk the sequence unti you find the start sequence AUG
+        for i in 0 .. sequence.len() - 3 {
+            let cur_codon = Codon::from_rna_triplet([sequence[i], sequence[i+1], sequence[i+2]]);
+            if cur_codon.get_amino_acid() == AminoAcid::Methionine {
+                start = i + 3;
+            }
+        }
+        for chunk in &self.sequence[start..].iter().chunks(Codon::codon_size()) {
             let triplet: Vec<&RNANucleotide> = chunk.collect();
             if triplet.len() == Codon::codon_size() {
                 let cur_acid = Codon::from_rna_triplet([*triplet[0], *triplet[1], *triplet[2]]).get_amino_acid();
@@ -312,13 +323,12 @@ impl AminoAcidSequence {
 
 #[cfg(test)]
 mod test {
-    use super::{DNASequence};
+    // use super::{DNASequence, RNASequence};
     #[test]
     fn test_gene() {
-        let gene = DNASequence::new(String::from("ATGCCCAACGGCATGCTATC"));
-        // let brca = DNAmSequence::new(String::from(BRCA1));
-        // println!("{}", brca.transcribe().translate().to_string());
-        assert_eq!(gene.get_complement().to_string(), "GATAGCATGCCGTTGGGCAT");
+        let gene = super::RNASequence::new(String::from("AAAAUGAAGCCCCACGCCUAGGAG"));
+        println!("{}", gene.translate().to_string());
+        // assert_eq!(gene.get_complement().to_string(), "GATAGCATGCCGTTGGGCAT");
     }
 }
 
